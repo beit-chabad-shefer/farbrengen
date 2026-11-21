@@ -67,9 +67,9 @@ h2{font-family:"Frank Ruhl Libre",serif;font-weight:900;font-size:28px;color:var
   </div>
 
   <div class="goal">
-    <p>עלות ההתוועדות לכבוד בעל התניא: כ-₪10,000</p>
-    <div class="bar"><i></i></div>
-    <div class="n">נותרו לגייס ₪6,500</div>
+    <p id="gcost">עלות ההתוועדות לכבוד בעל התניא: כ-₪10,000</p>
+    <div class="bar"><i id="gbar"></i></div>
+    <div class="n" id="grem">נותרו לגייס ₪6,500</div>
     <p style="font-weight:400;color:var(--muted);margin:4px 0 0;font-size:16px">כל תרומה מקרבת אותנו להצלחת הערב</p>
   </div>
 
@@ -139,6 +139,22 @@ document.querySelectorAll("a.pay").forEach(function(a){
   if(a.dataset.amt){u+="&Amount="+encodeURIComponent(a.dataset.amt);}
   a.href=u;a.target="_blank";a.rel="noopener";
 });
+</script>
+<script>
+(function(){
+  function nf(n){return n.toLocaleString("he-IL");}
+  var t=Date.now();
+  Promise.all([
+    fetch("config.json?"+t).then(function(r){return r.json();}),
+    fetch("progress.json?"+t).then(function(r){return r.json();}).catch(function(){return {raised:0};})
+  ]).then(function(a){
+    var g=a[0].goal||10000, raised=(a[0].manual||0)+(a[1].raised||0);
+    var rem=Math.max(g-raised,0);
+    document.getElementById("gcost").textContent="עלות ההתוועדות לכבוד בעל התניא: כ-₪"+nf(g);
+    document.getElementById("gbar").style.width=Math.min(100,Math.round(raised/g*100))+"%";
+    document.getElementById("grem").textContent=rem>0?"נותרו לגייס ₪"+nf(rem):"היעד הושג, תודה רבה!";
+  }).catch(function(){});
+})();
 </script>
 </body>
 </html>
