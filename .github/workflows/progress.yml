@@ -1,0 +1,68 @@
+name: Update progress
+on:
+  schedule:
+    - cron: "*/30 * * * *"
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fetch donations
+        env:
+          NEDARIM_KEY: ${{ secrets.NEDARIM_KEY }}
+        run: |
+          python3 - <<'PY'
+          import os, json, sys, datetime, urllib.request, urllib.parse
+          URL = "https://matara.pro/nedarimplus/Reports/Manage3.aspx"
+          MOSAD = "7003566"
+          def norm(s):
+              return "".join(c for c in (s or "") if c.isalnum())
+          GROUP = norm("התוועדות י״ט כסלו")
+          total, count, last_id = 0.0, 0, ""
+          for _ in range(10):
+              p = {"Action": "GetHistoryJson", "MosadId": MOSAD,
+                   "ApiPassword": os.environ["NEDARIM_KEY"], "MaxId": "2000"}
+              if last_id:
+                  p["LastId"] = last_id
+              req = urllib.request.Request(URL, data=urllib.parse.urlencode(p).encode())
+              with urllib.request.urlopen(req, timeout=60) as r:
+                  data = json.loads(r.read().decode("utf-8-sig"))
+              if isinstance(data, dict):
+                  if str(data.get("Result", data.get("Status", ""))).lower() == "error":
+                      print("API error:", data.get("Message"))
+                      sys.exit(1)
+                  rows = next((v for v in data.values() if isinstance(v, list)), [])
+              else:
+                  rows = data
+              if not rows:
+                  break
+              for row in rows:
+                  if norm(row.get("Groupe")) != GROUP:
+                      continue
+                  if str(row.get("Currency", "1")) not in ("1", ""):
+                      continue
+                  try:
+                      a = float(str(row.get("Amount", 0)).replace(",", ""))
+                  except ValueError:
+                      continue
+                  total += a
+                  if a > 0:
+                      count += 1
+              ids = [int(r["TransactionId"]) for r in rows if str(r.get("TransactionId", "")).isdigit()]
+              if not ids or len(rows) < 2000:
+                  break
+              last_id = str(max(ids))
+          out = {"raised": round(total), "donations": count,
+                 "updated": datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")}
+          json.dump(out, open("progress.json", "w"), ensure_ascii=False)
+          print(out)
+          PY
+      - name: Commit
+        run: |
+          git config user.name "progress-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add progress.json
+          git diff --staged --quiet || (git commit -m "update progress" && git push)
